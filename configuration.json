@@ -1,0 +1,15 @@
+{
+    "binaries":["ssh","zfs"],
+    "destinationZpool":"mini-pool",
+    "jobs":[
+        {
+            "username":"root",
+            "hostname":"trei.zenastronave.com",
+            "sourceZpool":"trei-pool",
+            "sourceZvols":["plex"],
+            "sourceHistory":3,
+            "destinationZfolder":"trei",
+            "destinationHistory":180            
+        }
+    ]
+}
