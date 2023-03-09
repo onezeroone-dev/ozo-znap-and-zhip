@@ -1,5 +1,7 @@
 #!/bin/bash
 
+DATETIME=$(TZ="Europe/London" date +%Y%m%d-%H%M%S)
+
 #source
 ssh root@trei.zenastronave.com zfs create -s -o compression=on -o dedup=off -o volblocksize=64k -V 60GB trei-pool/plex
 
