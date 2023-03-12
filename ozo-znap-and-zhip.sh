@@ -1,20 +1,9 @@
 #!/bin/bash
 
+#######################################
 # user-defined variables
-SUSER="root"
-SHOSTFQDN="trei.zenastronave.com"
-SZPOOL="trei-pool"
-SZVOL="plex2"
-SCOMPRESSION="on"
-SDEDUP="off"
-SVOLBLOCKSIZE="64k"
-SSIZE="1GB"
-SHISTORY=3
-DZPOOL="mini-pool"
-DHISTORY=180
-
-# derived variables
-DZFOLDER=${SHOSTFQDN}
+CONFDIR="/etc/ozo-znap-and-zhip.conf.d"
+#######################################
 
 # FUNCTIONS
 
@@ -62,10 +51,10 @@ function ozo-validate-configuration {
     if which ssh
     then
       # check that SSH with keys is possible
-      if ssh -o BatchMode=yes ${SUSER}@${SHOSTFQDN} true
+      if ssh -p ${SSHPORT} -o BatchMode=yes ${SUSER}@${SHOSTFQDN} true
       then
         # check that the remote system has zfs
-        if ! ssh ${SUSER}@${SHOSTFQDN} which zfs
+        if ! ssh -p ${SSHPORT} ${SUSER}@${SHOSTFQDN} which zfs
         then
           RETURN=1
           LEVEL="err" MESSAGE="Remote host ${SHOSTFQDN} is missing ZFS." ozo-log
@@ -97,13 +86,13 @@ function ozo-verify-szvol {
   ### Returns 0 (TRUE) if ZVOL exists or is successfully created and 1 (FALSE) if unable to create
   local RETURN=0
   # check if zvol exists on source
-  if ssh ${SUSER}@${SHOSTFQDN} zfs list -H -o name ${SZPOOL}/${SZVOL}
+  if ssh -p ${SSHPORT} ${SUSER}@${SHOSTFQDN} zfs list -H -o name ${SZPOOL}/${SZVOL}
   then
     # zvol exists; log
     LEVEL="info" MESSAGE="Found ${SZPOOL}/${SZVOL} on ${SHOSTFQDN}." ozo-log
   else
     # ZVOL does not exist; attempt to create
-    if ssh ${SUSER}@${SHOSTFQDN} zfs create -s -o compression=${SCOMPRESSION} -o dedup=${SDEDUP} -o volblocksize=${SVOLBLOCKSIZE} -V ${SSIZE} ${SZPOOL}/${SZVOL}
+    if ssh -p ${SSHPORT} ${SUSER}@${SHOSTFQDN} zfs create -s -o compression=${SCOMPRESSION} -o dedup=${SDEDUP} -o volblocksize=${SVOLBLOCKSIZE} -V ${SSIZE} ${SZPOOL}/${SZVOL}
     then
       # created; log
       LEVEL="info" MESSAGE="Created ZVOL ${SZPOOL}/${SZVOL} on ${SHOSTFQDN}." ozo-log
@@ -121,7 +110,7 @@ function ozo-sznap {
   ### Returns 0 (TRUE) on successful creation and 1 (FALSE) on failure
   local RETURN=0
   # attempt to take a snapshot
-  if ssh ${SUSER}@${SHOSTFQDN} zfs snapshot ${SSNAPSHOT}
+  if ssh -p ${SSHPORT} ${SUSER}@${SHOSTFQDN} zfs snapshot ${SSNAPSHOT}
   then
     # successful snapshot; log
     LEVEL="info" MESSAGE="Created snapshot ${SSNAPSHOT} on ${SHOSTFQDN}." ozo-log
@@ -139,7 +128,7 @@ function ozo-szhip {
   local RETURN=0
   LEVEL="info" MESSAGE="Attempting to ship snapshot ${SSNAPSHOT} from ${SHOSTFQDN} to ${DZPOOL}/${DZFOLDER}." ozo-log
   # attempt to ship
-  if ssh ${SUSER}@${SHOSTFQDN} zfs send ${SSENDOPTS} ${SLASTSNAP} ${SSNAPSHOT} | zfs recv -ev ${DZPOOL}/${DZFOLDER}
+  if ssh -p ${SSHPORT} ${SUSER}@${SHOSTFQDN} zfs send ${SSENDOPTS} ${SSNAPLAST} ${SSNAPSHOT} | zfs recv -ev ${DZPOOL}/${DZFOLDER}
   then
     # ship success
     LEVEL="info" MESSAGE="Shipped snapshot ${SSNAPSHOT} from ${SHOSTFQDN} to ${DZPOOL}/${DZFOLDER}."
@@ -153,57 +142,51 @@ function ozo-szhip {
 
 function ozo-count-ssnapshots {
   ### Counts source ZVOL snapshots
-  ### Returns the number of snapshots
-  return $( ssh ${SUSER}@${SHOSTFQDN} zfs list -H -t snapshot -o name ${SZPOOL}/${SZVOL} | wc -l )
+  echo $(ssh -p ${SSHPORT} ${SUSER}@${SHOSTFQDN} zfs list -t snapshot -H -o name ${SZPOOL}/${SZVOL} | wc -l)
 }
 
-function ozo-znz-origin {
+function ozo-count-dsnapshots {
+  ### Counts local ZVOL snapshots
+  echo $(zfs list -t snapshot -H -o name ${DZPOOL}/${DZFOLDER} | wc -l)
+}
+
+function ozo-verify-origin {
   ### Determines if the "@origin" exists and if not, snaps and ships
   local RETURN=0
+  local SSNAPCOUNT=$(ozo-count-ssnapshots)
   # check if source ZVOL has zero snapshots
-  if [[ $(ozo-count-ssnapshots) == 0 ]]
+  if [[ "${SSNAPCOUNT}" == "0" ]]
   then
     # zero snapshots; attempt to create the "@origin" snapshot
     LEVEL="info" MESSAGE="ZVOL ${SZPOOL}/${SZVOL} has no snapshots; attempting to snap and ship the @origin snapshot." ozo-log
     if SSNAPSHOT="${SZPOOL}/${SZVOL}@origin" ozo-sznap
     then
       # created successfully; attempt to ship
-      RETURN=$(SSENDOPTS="-p" SSNAPLAST="" SSNAPSHOT="${SZPOOL}/${SZVOL}@origin" ozo-szhip)
+      if ! SSENDOPTS="-p" SSNAPLAST="" SSNAPSHOT="${SZPOOL}/${SZVOL}@origin" ozo-szhip
+      then
+        RETURN=1
+      fi
     fi
-  fi
-  return ${RETURN}
-}
-
-function ozo-get-slastsnap {
-  ### Gets the most recently created snapshot; sets SLASTSNAP
-  ### Returns the name of the last snapshot or if none are found, an empty string
-  local RETURN=""
-  if [[ $(ozo-count-ssnapshots) > 0 ]]
-  then
-    RETURN="$(ssh ${SUSER}@${SHOSTFQDN} zfs list -t snapshot -H -o name ${SZPOOL}/${SZVOL} | tail -n 1)"
   else
-    RETURN=""
+    LEVEL="info" MESSAGE="ZVOL ${SZPOOL}/${SZVOL} has snapshots; skipping the @origin snap and ship."
   fi
   return ${RETURN}
 }
 
 function ozo-znap-and-zhip {
-  ### Determines if the "@origin" exists and if not, snaps and ships
+  ### Determines the most recent snapshot on the source
   ### Takes and ships an incremental snapshot
   ### Returns 0 (TRUE) on success and 1 (FALSE) on failure
   local RETURN=0
-  DATETIME=$(TZ="Europe/London" date +%Y%m%d-%H%M%S)
-  SSNAPSHOT="${SZPOOL}/${SZVOL}@${SHOSTFQDN}-${DATETIME}"
-  # call ozo-znz-origin to make sure the "@origin" has been snapped and shipped
-  if ozo-znz-origin
+  SSNAPLAST="$(ssh -p ${SSHPORT} ${SUSER}@${SHOSTFQDN} zfs list -t snapshot -H -o name ${SZPOOL}/${SZVOL} | tail -n 1)"
+  SSNAPSHOT="${SZPOOL}/${SZVOL}@${SHOSTFQDN}-$(TZ='Europe/London' date +%Y%m%d-%H%M%S)"
+  # attempt to snap
+  if SSNAPSHOT=${SSNAPSHOT} ozo-sznap
   then
-    # origin exists, attempt to snapshot
-    if SSNAPSHOT=${SSNAPSHOT} ozo-sznap
+    # attempt to ship
+    LEVEL="info" MESSAGE="shipping with ${SSENDOPTS} ${SSNAPLAST} ${SSNAPSHOT}" ozo-log
+    if ! SSENDOPTS="-p -i" SSNAPLAST="${SSNAPLAST}" SSNAPSHOT="${SSNAPSHOT}" ozo-szhip
     then
-      # attempt to ship
-      SLASTSNAP="$(ozo-get-slastsnap)"
-      RETURN=$(SSENDOPTS="-p -i" SLASTSNAP=${SLASTSNAP} SSNAPSHOT=${SSNAPSHOT} ozo-szhip)
-    else
       RETURN=1
     fi
   else
@@ -212,53 +195,95 @@ function ozo-znap-and-zhip {
   return ${RETURN}
 }
 
-function ozo-snapshot-maintenance {
-  return 0
+function ozo-snapshot-smaintenance {
+  ### Performs source host snapshot maintenance
+  ### Returns 0 (TRUE) on success and 1 (FALSE) on failure
+  local RETURN=0
+  local SSNAPCOUNT=$(ozo-count-ssnapshots)
+  LEVEL="info" MESSAGE="Beginning source snapshot maintenance." ozo-log
+  if [[ "${SSNAPCOUNT}" > "${SHISTORY}" ]]
+  then
+    for OSNAPSHOT in $( ssh -p ${SSHPORT} ${SUSER}@${SHOSTFQDN} zfs list -t snapshot -H -o name -s creation ${SZPOOL}/${SZVOL} | head -n -${SHISTORY} )
+    do
+      ssh -p ${SSHPORT} ${USER}@${SHOSTFQDN} zfs destroy ${OSNAPSHOT}
+    done
+  else
+    LEVEL="info" MESSAGE="Number of snapshots found (${SSNAPCOUNT}) is less than or equal to configured snapshot history value (${SHISTORY}); no maintenance required."
+  fi
+  return ${RETURN}
+}
+
+function ozo-snapshot-dmaintenance {
+  ### Performs destination host snapshot maintenance
+  ### Returns 0 (TRUE) on success and 1 (FALSE) on failure
+  local RETURN=0
+  local DSNAPCOUNT=$(ozo-count-dsnapshots)
+  LEVEL="info" MESSAGE="Beginning destination snapshot maintenance." ozo-log
+  if [[ "${DSNAPCOUNT}" > "${DHISTORY}" ]]
+  then
+    for OSNAPSHOT in $( zfs list -t snapshot -H -o name -s creation ${SZPOOL}/${SZVOL} | head -n -${DHISTORY} )
+    do
+      zfs destroy ${OSNAPSHOT}
+    done
+  else
+    LEVEL="info" MESSAGE="Number of snapshots found (${DSNAPCOUNT}) is less than or equal to configured snapshot history value (${DHISTORY}); no maintenance required."
+  fi
+  return ${RETURN}  
+}
+
+function ozo-program-loop {
+  ### Loops through configuration files in CONFDIR and performs the snap, ship, and maintenance
+  local RETURN=0
+  for CONFIGURATION in $( ls ${CONFDIR}/*conf )
+  do
+    source "${CONF_DIR}/${CONFIGURATION}"
+    DZFOLDER=${SHOSTFQDN}
+    # call the configuration function
+    if ozo-validate-configuration
+    then
+      # configuration validates; log; call the check source zvol function
+      LEVEL="info" MESSAGE="Configuration validates." ozo-log
+      if ozo-verify-szvol
+      then
+        # source zvol exists or has been created; log and verify the origin snapshot
+        LEVEL="info" MESSAGE="Source ZVOL verified." ozo-log
+        if ozo-verify-origin
+        then
+          # source origin verifies; log; call znap and zhip
+          LEVEL="info" MESSAGE="Origin snapshot verified." ozo-log
+          if ozo-znap-and-zhip
+          then
+            # snap and ship was successful; log
+            LEVEL="info" MESSAGE="Created and shipped snapshot." ozo-log
+            # perform maintenance
+            ozo-snapshot-smaintenance
+            ozo-snapshot-dmaintenance
+          else
+            RETURN=1
+            LEVEL="err" MESSAGE="Error creating and shipping snapshot." ozo-log
+          fi
+        else
+          RETURN=1
+          LEVEL="err" MESSAGE="Error verifying source origin" ozo-log
+        fi
+      else
+        RETURN=1
+        LEVEL="err" MESSAGE="Error verfiying source ZVOL" ozo-log
+      fi
+    else
+      RETURN=1
+      LEVEL="err" MESSAGE="Configuration does not validate." ozo-log
+    fi
+  done
 }
 
 # MAIN
 
-# global variables
-EXIT=0
-
-# call the configuration function
-if ozo-validate-configuration
-then
-  # configuration validates; log and call the check source zvol function
-  LEVEL="info" MESSAGE="Configuration validates." ozo-log
-  if ozo-verify-szvol
-  then
-    # source zvol exists or has been created; log and call the znap and zhip function
-    LEVEL="info" MESSAGE="Source ZVOL verified." ozo-log
-    if ozo-znap-and-zhip
-    then
-      # snap and ship was successful; log
-      LEVEL="info" MESSAGE="Created and shipped snapshot." ozo-log
-      # perform maintenance
-      if ozo-snapshot-maintenance
-      then
-        LEVEL="info" MESSAGE="Performed snapshot maintenance." ozo-log
-      else
-        EXIT=1
-        LEVEL="err" MESSAGE="Error performing snapshot maintenance." ozo-log
-      fi
-    else
-      EXIT=1
-      LEVEL="err" MESSAGE="Error creating and shipping snapshot." ozo-log
-    fi
-  else
-    EXIT=1
-    LEVEL="err" MESSAGE="Error verfiying source ZVOL" ozo-log
-  fi
-else
-  EXIT=1
-  LEVEL="err" MESSAGE="Configuration does not validate." ozo-log
-fi
-
-if [[ ${EXIT} == 0 ]]
+if ozo-program-loop > /dev/null 2&>1
 then
   LEVEL="info" MESSAGE="Finished with success." ozo-log
+  exit 0
 else
   LEVEL="err" MESSAGES="Finished with errors." ozo-log
-
-exit ${EXIT}
+  exit 1
+fi
