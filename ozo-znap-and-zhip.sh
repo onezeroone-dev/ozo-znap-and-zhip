@@ -146,7 +146,7 @@ function ozo-szhip {
   else
     # ship failure
     RETURN=1
-    LEVEL="error" MESSAGE="Error shipping snapshot ${SSNAPSHOT} from ${SHOSTFQDN} to ${DZPOOL}/${DZFOLDER}."
+    LEVEL="error" MESSAGE="Error shipping snapshot ${SSNAPSHOT} from ${SHOSTFQDN} to ${DZPOOL}/${DZFOLDER}." ozo-log
   return ${RETURN}
 }
 
