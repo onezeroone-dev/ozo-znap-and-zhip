@@ -147,6 +147,7 @@ function ozo-szhip {
     # ship failure
     RETURN=1
     LEVEL="error" MESSAGE="Error shipping snapshot ${SSNAPSHOT} from ${SHOSTFQDN} to ${DZPOOL}/${DZFOLDER}." ozo-log
+  fi
   return ${RETURN}
 }
 
@@ -223,7 +224,6 @@ EXIT=0
 # call the configuration function
 if ozo-validate-configuration
 then
-  echo "configuration"
   # configuration validates; log and call the check source zvol function
   LEVEL="info" MESSAGE="Configuration validates." ozo-log
   if ozo-verify-szvol
