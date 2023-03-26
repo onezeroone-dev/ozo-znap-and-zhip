@@ -16,7 +16,7 @@ Designate a *destination* system. Install the SSH client and ZFS, and create a *
 
 ### Clone the Repository and Copy Files
 
-Clone this repository to a temporary directory on the Rdiff-Backup System. Then (as `root`):
+Clone this repository to a temporary directory on the ZFS *destination* system. Then (as `root`):
 
 - Copy `ozo-znap-and-zhip.sh` to `/etc/cron.daily` and set permissions to `rwx------` (`0700`)
 - Create `/etc/ozo-znap-and-zhip.conf.d`
