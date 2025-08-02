@@ -1,0 +1,24 @@
+# SSH port
+SSHPORT=22
+# Source host username
+SUSER="root"
+# Source fully-qualified domain name
+SHOSTFQDN="host.example.com"
+# Source Zpool name
+SZPOOL="source-pool"
+# Source Zvol name
+SZVOL="example"
+# Source Zvol compression setting (on|off)
+SCOMPRESSION="on"
+# Source Zvol deduplication setting (on|off)
+SDEDUP="off"
+# Source Zvol block size in kilobytes
+SVOLBLOCKSIZE="64k"
+# Source Zvol size with units (MB|GB|TB)
+SSIZE="1GB"
+# Number of snapshots to keep on the source system
+SHISTORY=3
+# Terget Zpool name
+DZPOOL="target-pool"
+# Number of snapshots to keep on the target system
+DHISTORY=180
