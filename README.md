@@ -10,7 +10,7 @@ To install this script on your system, you must first register the One Zero One 
 
 ### AlmaLinux 10, Red Hat Enterprise Linux 10, Rocky Linux 10 (RPM)
 ```bash
-rpm -Uvh https://repositories.onezeroone.dev/el/10/noarch/ozo-rdiff-backup-1.0.0-1.el10.noarch.rpm
+rpm -Uvh https://repositories.onezeroone.dev/el/10/noarch/onezeroone-release-latest.el10.noarch.rpm
 rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-ONEZEROONE
 dnf repolist
 dnf -y install ozo-znap-and-zhip
