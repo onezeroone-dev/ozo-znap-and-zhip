@@ -15,6 +15,13 @@ rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-ONEZEROONE
 dnf repolist
 dnf -y install ozo-znap-and-zhip
 ```
+### AlmaLinux 9, Red Hat Enterprise Linux 9, Rocky Linux 9 (RPM)
+```bash
+rpm -Uvh https://repositories.onezeroone.dev/el/9/noarch/onezeroone-release-latest.el9.noarch.rpm
+rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-ONEZEROONE
+dnf repolist
+dnf -y install ozo-znap-and-zhip
+```
 
 ### Debian (DEB)
 PENDING.
@@ -47,21 +54,13 @@ On the _source_ system (as `root`):
 * Generate SSH keys for the `root` user:
 
     `ssh keygen`
+  
+On the _target_ system (as `root`):
 
 * Install your `root` user SSH keys to each of the source system(s) with e.g.:
 
-    `ssh-copy-id -i root@rdiff-host.example.com`
-
-## Usage
-```
-ozo-znap-and-zhip
-    <String>
-```
-
-## Examples
-```bash
-ozo-znap-and-zhip.sh /etc/ozo-znap-and-zhip.conf.d/ozo-znap-and-zhip-host.conf.example
-```
+    `ssh-copy-id -i root@host.example.com`
 
 ## Notes
 Please visit [One Zero One](https://onezeroone.dev) to learn more about my other work.
+
